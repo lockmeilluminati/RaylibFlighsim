@@ -1,0 +1,87 @@
+#region VEXcode Generated Robot Configuration
+from vex import *
+import urandom
+
+brain=Brain()
+
+# DEVICE CONFIGURATION: Port 7 Gyro is completely removed!
+brain_inertial = Inertial()
+touchled_8 = Touchled(Ports.PORT8)
+touchled_9 = Touchled(Ports.PORT9)
+bumper_10 = Bumper(Ports.PORT10)
+
+def initializeRandomSeed():
+    wait(100, MSEC)
+    xaxis = brain_inertial.acceleration(XAXIS) * 1000
+    yaxis = brain_inertial.acceleration(YAXIS) * 1000
+    zaxis = brain_inertial.acceleration(ZAXIS) * 1000
+    systemTime = brain.timer.system() * 100
+    urandom.seed(int(xaxis + yaxis + zaxis + systemTime)) 
+
+initializeRandomSeed()
+#endregion VEXcode Generated Robot Configuration
+
+def main():
+    brain.screen.clear_screen()
+    brain.screen.print("Calibrating BRAIN...")
+    
+    # Only calibrate the internal sensor
+    brain_inertial.calibrate()
+    while brain_inertial.is_calibrating():
+        wait(50, MSEC)
+    
+    brain.screen.clear_screen()
+    brain.screen.print("Ready to Play!")
+
+    # Anchor the center position from the Brain's chip
+    center_yaw = brain_inertial.rotation(DEGREES)
+    center_pitch = brain_inertial.orientation(PITCH)
+
+    touchled_8.set_color(Color.RED)
+    touchled_9.set_color(Color.BLUE)
+
+    while True:
+        # Get all movement natively from the Brain
+        raw_yaw = brain_inertial.rotation(DEGREES)
+        raw_pitch = brain_inertial.orientation(PITCH)
+        
+        diff_yaw = raw_yaw - center_yaw
+        diff_pitch = raw_pitch - center_pitch
+        
+        # Wrap math to prevent infinite drift off-screen
+        while diff_yaw > 180: diff_yaw -= 360
+        while diff_yaw < -180: diff_yaw += 360
+        while diff_pitch > 180: diff_pitch -= 360
+        while diff_pitch < -180: diff_pitch += 360
+        
+        # Tiny deadzone to keep the crosshair still when your hands are still
+        if abs(diff_yaw) < 1.5: diff_yaw = 0.0
+        if abs(diff_pitch) < 1.5: diff_pitch = 0.0
+        
+        if bumper_10.pressing():
+            stat_10 = "Pressed"
+            touchled_8.on()
+            touchled_9.on()
+        else:
+            stat_10 = "Released"
+            touchled_8.off()
+            touchled_9.off()
+
+        stat_8 = "Pressed" if touchled_8.pressing() else "Released"
+        stat_9 = "Pressed" if touchled_9.pressing() else "Released"
+
+        # Faking the "7:Gyro" tag so the PC code accepts it seamlessly
+        data = (
+            "7:Gyro:{0}|{1},"
+            "10:Bumper:{2},"
+            "8:TouchLED:{3},"
+            "9:TouchLED:{4}"
+        ).format(
+            round(diff_yaw, 1), round(diff_pitch, 1), 
+            stat_10, stat_8, stat_9
+        )
+        
+        print(data)
+        wait(20, MSEC) 
+
+main()
